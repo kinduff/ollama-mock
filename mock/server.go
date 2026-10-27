@@ -255,6 +255,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/chat/completions", s.handleOAChat)
 	m.HandleFunc("POST /v1/completions", s.handleOACompletion)
 	m.HandleFunc("POST /v1/embeddings", s.handleOAEmbeddings)
+	m.HandleFunc("POST /v1/systemone", s.handleSystemOne)
 
 	m.HandleFunc("GET /_mock/state", s.handleMockState)
 	m.HandleFunc("GET /_mock/requests", s.handleMockRequests)
