@@ -245,6 +245,10 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /api/delete", s.handleDelete)
 	m.HandleFunc("HEAD /api/blobs/{digest}", s.handleBlobHead)
 	m.HandleFunc("POST /api/blobs/{digest}", s.handleBlobPost)
+	m.HandleFunc("POST /api/generate", s.handleGenerate)
+	m.HandleFunc("POST /api/chat", s.handleChat)
+	m.HandleFunc("POST /api/embed", s.handleEmbed)
+	m.HandleFunc("POST /api/embeddings", s.handleEmbeddings)
 
 
 	m.HandleFunc("GET /_mock/state", s.handleMockState)
