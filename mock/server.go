@@ -250,6 +250,11 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/embed", s.handleEmbed)
 	m.HandleFunc("POST /api/embeddings", s.handleEmbeddings)
 
+	m.HandleFunc("GET /v1/models", s.handleOAModels)
+	m.HandleFunc("GET /v1/models/{model...}", s.handleOAModel)
+	m.HandleFunc("POST /v1/chat/completions", s.handleOAChat)
+	m.HandleFunc("POST /v1/completions", s.handleOACompletion)
+	m.HandleFunc("POST /v1/embeddings", s.handleOAEmbeddings)
 
 	m.HandleFunc("GET /_mock/state", s.handleMockState)
 	m.HandleFunc("GET /_mock/requests", s.handleMockRequests)
