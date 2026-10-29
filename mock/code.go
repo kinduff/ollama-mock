@@ -2,6 +2,7 @@ package mock
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -37,11 +38,43 @@ func (w *writer) codeBlock(lang string) string {
 	return "```" + lang + "\n" + w.code(lang) + "\n```"
 }
 
-// infill is a fill-in-the-middle answer: a few lines of code, no fence.
-func (w *writer) infill(m Model) string {
-	lines := strings.Split(w.code(pick(w.r, []string{"python", "javascript", "go"})), "\n")
+// infill is a fill-in-the-middle answer: a few lines of code, no fence, in the language of the
+// code around the gap.
+func (w *writer) infill(around string) string {
+	lang := codeLanguage(around)
+	if lang == "" {
+		lang = pick(w.r, []string{"python", "javascript", "go"})
+	}
+	lines := strings.Split(w.code(lang), "\n")
 	start := w.r.between(1, max(1, len(lines)-3))
 	return strings.Join(lines[start:min(len(lines), start+w.r.between(1, 4))], "\n")
+}
+
+// codeSigns tell a language by its syntax, most distinctive first: Go's := before JavaScript's
+// braces, TypeScript's annotations before plain JavaScript.
+var codeSigns = []struct {
+	lang string
+	re   *regexp.Regexp
+}{
+	{"go", regexp.MustCompile(`(?m)^package \w+|:=|\bfunc \w+\(.*\) (\w|\[|\{)|\bfmt\.`)},
+	{"rust", regexp.MustCompile(`\bfn \w+\(|\blet mut\b|\bimpl\b|println!`)},
+	{"swift", regexp.MustCompile(`(?m)^import (Foundation|SwiftUI|UIKit)|\bfunc \w+\(.*\) -> `)},
+	{"python", regexp.MustCompile(`(?m)^\s*def \w+\(.*\):|^\s*(import|from) \w+|"""|\bself\.|^\s*(if|for|while|elif|else|try|with) ?.*:\s*$`)},
+	{"ruby", regexp.MustCompile(`(?m)^\s*def \w+|^\s*end\s*$|\bputs\b|\.each do\b`)},
+	{"sql", regexp.MustCompile(`(?i)\bselect\b[\s\S]*\bfrom\b|\binsert into\b|\bcreate table\b`)},
+	{"bash", regexp.MustCompile(`(?m)^#!.*\b(ba)?sh\b|^\s*(echo|export|set -e)\b|\$\{\w+`)},
+	{"typescript", regexp.MustCompile(`\binterface \w+|:\s*(string|number|boolean)\b|<\w+>\(`)},
+	{"javascript", regexp.MustCompile(`\bfunction\b|\b(const|let|var) \w+ =|=>|console\.log|\brequire\(`)},
+}
+
+// codeLanguage names the language of a piece of code, or "" when nothing gives it away.
+func codeLanguage(src string) string {
+	for _, s := range codeSigns {
+		if s.re.MatchString(src) {
+			return s.lang
+		}
+	}
+	return ""
 }
 
 func (w *writer) code(lang string) string {

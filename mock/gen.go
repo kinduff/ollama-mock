@@ -149,7 +149,7 @@ func generate(q genRequest) genResult {
 	case q.Raw:
 		res.Content = tokenize(w.continuation(prompt))
 	case q.Suffix != "":
-		res.Content = tokenize(w.infill(q.Model))
+		res.Content = tokenize(w.infill(prompt + "\n" + q.Suffix))
 	default:
 		res.Content = tokenize(w.answer(q, prompt, last.Images))
 	}

@@ -411,3 +411,39 @@ func TestContractionsAreNotTopics(t *testing.T) {
 		t.Errorf("keywords: got %s, want %s", got, want)
 	}
 }
+
+func TestInfillKeepsLanguage(t *testing.T) {
+	for src, want := range map[string]string{
+		"def fibonacci(n):\n    \"\"\"Return the nth Fibonacci number.\"\"\"\n": "python",
+		"package main\n\nfunc main() {\n\tx := 1\n":                             "go",
+		"const total = items.reduce((a, b) => a + b, 0);\n":                     "javascript",
+		"interface User { name: string }\n":                                     "typescript",
+		"fn main() {\n    let mut n = 0;\n":                                     "rust",
+		"SELECT name FROM users\n":                                              "sql",
+		"#!/usr/bin/env bash\necho hi\n":                                        "bash",
+		"def greet(name)\n  puts name\nend\n":                                   "ruby",
+		"hello there\n":                                                         "",
+	} {
+		if got := codeLanguage(src); got != want {
+			t.Errorf("codeLanguage(%q) = %q, want %q", src, got, want)
+		}
+	}
+
+	// Fills for a Python prefix stay Python, whatever the seed.
+	base := newTest(t, Options{Models: []string{"qwen2.5-coder:7b"}})
+	for i := range 20 {
+		body, _ := json.Marshal(map[string]any{"model": "qwen2.5-coder:7b", "stream": false,
+			"prompt": "def fibonacci(n):\n    \"\"\"Return the nth Fibonacci number.\"\"\"\n",
+			"suffix": "\n\nprint(fibonacci(" + string(rune('0'+i%10)) + strings.Repeat("0", i/10) + "))\n"})
+		status, out := post(t, base+"/api/generate", string(body))
+		if status != 200 {
+			t.Fatalf("generate %d: %v", status, out)
+		}
+		middle := out["response"].(string)
+		for _, sign := range []string{":=", "{", "}", ";", "const ", "func "} {
+			if strings.Contains(middle, sign) {
+				t.Errorf("python fill has %q: %q", sign, middle)
+			}
+		}
+	}
+}
