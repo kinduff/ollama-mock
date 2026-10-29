@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollama Mock</title>
+<meta name="description" content="A fake Ollama server for testing without running models. Deterministic, varied answers for any model, no GPU, no downloads. Try it right here: the mock runs in your browser.">
+<meta name="theme-color" content="#fafaf9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0a09" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Ollama Mock">
+<meta property="og:title" content="Ollama Mock">
+<meta property="og:description" content="A fake Ollama server for testing without running models. Try it in your browser.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@kinduff">
+<meta name="twitter:creator" content="@kinduff">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦙</text></svg>">
+<link rel="modulepreload" href="mock.js">
+<link rel="modulepreload" href="terminal.js">
+<link rel="preload" href="ollama-mock.wasm" as="fetch" type="application/wasm" crossorigin>
+<style>
+  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --code: #f5f5f4; --accent: #4f46e5; --accent-bg: #eef2ff; --err: #be123c; --err-bg: #fff1f2; --ok: #16a34a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0c0a09; --fg: #f5f5f4; --muted: #a8a29e; --line: #292524; --code: #1c1917; --accent: #a5b4fc; --accent-bg: #1e1b4b; --err: #fda4af; --err-bg: #2a0e14; --ok: #4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 ui-sans-serif, system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.02em; }
+  h2 { font-size: 1rem; margin: 40px 0 12px; }
+  p { margin: 0 0 12px; }
+  [hidden] { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  a { color: var(--accent); }
+  code, pre, textarea, input, select, button { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  td { padding: 10px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  td:first-child { padding-right: 16px; white-space: nowrap; }
+  footer { margin-top: 56px; font-size: 14px; }
+
+  .card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 24px 0 8px; }
+  .conn { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+  .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); animation: pulse 1.2s ease-in-out infinite; }
+  .conn.on .dot { background: var(--ok); animation: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .conn.off .dot { background: var(--err); animation: none; }
+  .conn.on b { color: var(--fg); font-weight: 600; }
+  .conn span { white-space: nowrap; }
+  @media (max-width: 480px) { #conn-version { display: none; } }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); background: var(--code); }
+  .tabs [role=tab] { font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 6px 10px 8px; color: var(--muted); }
+  .tabs [role=tab][aria-selected=true] { color: var(--fg); border-bottom-color: var(--accent); }
+  .tabs select { margin-bottom: 6px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .bar label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+  .grow { flex: 1; }
+  input, select, textarea { color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  input[type=checkbox] { accent-color: var(--accent); }
+  input[list] { width: 190px; }
+  button { color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .pane { padding: 12px; display: grid; gap: 10px; }
+  .pane label { font-size: 14px; color: var(--muted); display: grid; gap: 4px; }
+  .pane textarea { width: 100%; resize: vertical; }
+  .out:empty { display: none; }
+  .out { display: grid; gap: 14px; }
+
+  #log { height: 460px; max-height: 65vh; overflow-y: auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 100%; overflow-wrap: anywhere; }
+  .msg > :last-child { margin-bottom: 0; }
+  .msg p, .msg ul, .msg ol, .msg pre, .msg table { margin: 0 0 10px; }
+  .msg ul, .msg ol { padding-left: 22px; }
+  .msg h4 { margin: 0 0 6px; font-size: 1rem; }
+  .msg table { font-size: 14px; }
+  .msg th, .msg td { text-align: left; padding: 4px 10px 4px 0; border-top: 1px solid var(--line); }
+  .msg code { background: var(--code); border-radius: 4px; padding: 0 3px; }
+  .msg pre code { background: none; padding: 0; }
+  .user { align-self: flex-end; max-width: 85%; background: var(--accent-bg); border-radius: 12px; padding: 8px 12px; white-space: pre-wrap; }
+  .user img, .attached img { display: block; max-height: 120px; max-width: 100%; border-radius: 8px; margin-bottom: 6px; }
+  .think { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
+  .think summary { cursor: pointer; }
+  .think div { border-left: 2px solid var(--line); padding-left: 10px; margin-top: 4px; white-space: pre-wrap; }
+  .call { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; margin: 0 0 8px; }
+  .call b { color: var(--accent); font-weight: 600; }
+  .stats { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .err { color: var(--err); background: var(--err-bg); border-radius: 8px; padding: 8px 12px; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pending::after { content: "▍"; animation: blink 1s steps(1) infinite; color: var(--muted); }
+  @keyframes blink { 50% { opacity: 0; } }
+  .empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
+  .chips button { font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; border-radius: 999px; padding: 4px 12px; }
+  .attached { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; font-size: 13px; color: var(--muted); }
+  .attached img { max-height: 48px; margin: 0; }
+  form { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+  form textarea { flex: 1; resize: none; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 15px; padding: 7px 10px; min-height: 38px; max-height: 160px; }
+  .attach { display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; cursor: pointer; color: var(--muted); }
+  .attach:hover { border-color: var(--accent); }
+  .attach input { display: none; }
+
+  .q h4 { margin: 0; font-size: 15px; }
+  .q p { margin: 2px 0 8px; font-size: 14px; color: var(--muted); }
+  .row { display: grid; grid-template-columns: minmax(70px, 9em) 1fr 3.2em; gap: 10px; align-items: center; font-size: 14px; }
+  .row .track { height: 8px; border-radius: 4px; background: var(--code); overflow: hidden; }
+  .row .track span { display: block; height: 100%; background: var(--line); }
+  .row.on { font-weight: 600; }
+  .row.on .track span { background: var(--accent); }
+  .row :last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .grid { font-size: 14px; }
+  .grid th, .grid td { padding: 6px 8px; border-top: 1px solid var(--line); text-align: center; font-variant-numeric: tabular-nums; }
+  .grid th:first-child { text-align: left; font-weight: normal; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  @media (max-width: 560px) { .grid th:first-child { max-width: 130px; } }
+  .infill { white-space: pre-wrap; margin: 0; }
+  mark { background: var(--accent-bg); color: var(--fg); outline: 1px solid var(--accent); border-radius: 2px; }
+
+  .term { background: #0c0a09; color: #e7e5e4; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .term-head { display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 12px; color: #a8a29e; background: #1c1917; border-bottom: 1px solid #292524; }
+  .term-head + .term-head, .srv-log + .term-head { border-top: 1px solid #292524; }
+  .term pre { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .srv-log { display: block; height: 104px; overflow-y: auto; padding: 6px 12px !important; color: #a8a29e; }
+  .shell { height: 380px; max-height: 60vh; overflow-y: auto; padding: 8px 12px; cursor: text; }
+  .prompt-line { display: flex; }
+  .ps1 { color: #a5b4fc; white-space: pre; }
+  .cmd { flex: 1; min-width: 0; background: none; border: 0; padding: 0; color: inherit; font: inherit; outline: none; }
+  .cmd::placeholder { color: #57534e; }
+  .ctrl-c { margin-left: auto; font-size: 12px; padding: 0 8px; background: #292524; color: #e7e5e4; border-color: #44403c; }
+  .t-ps { color: #a5b4fc; } .t-dim { color: #78716c; } .t-err { color: #fda4af; } .t-inv { background: #e7e5e4; color: #0c0a09; }
+  .t-table { display: block; white-space: pre; overflow-x: auto; }
+  .t-link { color: #a5b4fc; text-decoration: underline dotted; cursor: pointer; }
+  @media (max-width: 560px) { .cmd { font-size: 16px; } }
+  .err button { margin-left: 8px; font-size: 13px; }
+  #raw summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+  #raw pre { margin-top: 8px; max-height: 320px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ollama Mock 🦙</h1>
+  <p class="muted">A fake <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> server for testing without running models. Same API, same port, any model name.</p>
+  <p class="muted">Answers are deterministic, varied and kinda realistic in shape: thinking, tool calls, vision, JSON, embeddings, decisions, fill-in-the-middle, real model sizes and token speeds. Ollama works as usual. Open source on <a href="https://github.com/kinduff/ollama-mock" target="_blank" rel="noopener">GitHub</a>.</p>
+
+  <section class="card" aria-label="Try the mock">
+    <div class="conn" id="conn" role="status"><span class="dot"></span><span id="conn-text">Connecting to <b>browser:11434</b>…</span><span class="grow"></span><span id="conn-version"></span></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="chat" id="tab-chat">Chat</button>
+      <button role="tab" aria-selected="false" aria-controls="terminal" id="tab-terminal">Terminal</button>
+      <button role="tab" aria-selected="false" aria-controls="decision" id="tab-decision">Decision</button>
+      <button role="tab" aria-selected="false" aria-controls="embeddings" id="tab-embeddings">Embeddings</button>
+      <button role="tab" aria-selected="false" aria-controls="infill" id="tab-infill">Infill</button>
+      <span class="grow"></span>
+      <select id="speed" aria-label="Speed">
+        <option value="1">Simulated</option>
+        <option value="0.1">10x faster</option>
+        <option value="0">Instant</option>
+      </select>
+    </div>
+
+    <div id="chat" role="tabpanel" aria-labelledby="tab-chat">
+      <div class="bar">
+        <input id="model" list="chat-models" value="qwen3:8b" aria-label="Model" spellcheck="false" autocomplete="off">
+        <datalist id="chat-models"></datalist>
+        <label><input type="checkbox" id="tools"> Tools</label>
+        <label><input type="checkbox" id="json"> JSON</label>
+        <span class="grow"></span>
+        <button id="reset" type="button">New chat</button>
+      </div>
+      <div id="log" aria-live="polite"></div>
+      <div class="attached" id="attached" hidden></div>
+      <form id="form">
+        <label class="attach" title="Attach an image"><input type="file" id="image" accept="image/*">+ Image</label>
+        <textarea id="input" rows="1" placeholder="Loading the mock…" aria-label="Message" disabled></textarea>
+        <button id="send" disabled>Send</button>
+      </form>
+    </div>
+
+    <div id="terminal" role="tabpanel" aria-labelledby="tab-terminal" hidden>
+      <div class="term">
+        <div class="term-head">ollama-mock, already running</div>
+        <pre class="srv-log" aria-label="ollama-mock log"></pre>
+        <div class="term-head">zsh<button class="ctrl-c" type="button" hidden>Ctrl+C</button></div>
+        <div class="shell">
+          <pre class="shell-out" aria-live="polite"></pre>
+          <div class="prompt-line" hidden><span class="ps1">$ </span><input class="cmd" aria-label="Command" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="decision" role="tabpanel" aria-labelledby="tab-decision" hidden>
+      <div class="bar">
+        <input id="d-model" list="d-models" value="kev" aria-label="Model" spellcheck="false" autocomplete="off">
+        <datalist id="d-models"><option value="kev"><option value="nimble"><option value="clef"></datalist>
+        <span class="muted small"><code>POST /v1/systemone</code></span>
+        <span class="grow"></span>
+        <button id="d-run" type="button" disabled>Decide</button>
+      </div>
+      <div class="pane">
+        <label>State <textarea id="d-state" rows="4" spellcheck="false"></textarea></label>
+        <label>Questions <textarea id="d-questions" rows="9" spellcheck="false"></textarea></label>
+        <div id="d-out" class="out"></div>
+      </div>
+    </div>
+
+    <div id="embeddings" role="tabpanel" aria-labelledby="tab-embeddings" hidden>
+      <div class="bar">
+        <input id="e-model" list="e-models" value="nomic-embed-text" aria-label="Model" spellcheck="false" autocomplete="off">
+        <datalist id="e-models"><option value="nomic-embed-text"><option value="embeddinggemma"><option value="qwen3-embedding"></datalist>
+        <span class="muted small"><code>POST /api/embed</code></span>
+        <span class="grow"></span>
+        <button id="e-run" type="button" disabled>Embed</button>
+      </div>
+      <div class="pane">
+        <label>One text per line <textarea id="e-input" rows="5" spellcheck="false"></textarea></label>
+        <div id="e-out" class="out"></div>
+      </div>
+    </div>
+
+    <div id="infill" role="tabpanel" aria-labelledby="tab-infill" hidden>
+      <div class="bar">
+        <input id="i-model" list="i-models" value="qwen2.5-coder:7b" aria-label="Model" spellcheck="false" autocomplete="off">
+        <datalist id="i-models"><option value="qwen2.5-coder:7b"><option value="codellama"><option value="starcoder2"></datalist>
+        <span class="muted small"><code>POST /api/generate</code> with <code>suffix</code></span>
+        <span class="grow"></span>
+        <button id="i-run" type="button" disabled>Fill</button>
+      </div>
+      <div class="pane">
+        <label>Before the cursor <textarea id="i-prefix" rows="3" spellcheck="false"></textarea></label>
+        <label>After the cursor <textarea id="i-suffix" rows="3" spellcheck="false"></textarea></label>
+        <div id="i-out" class="out"></div>
+      </div>
+    </div>
+  </section>
+  <p id="status" class="muted small">Loading the mock (about 2 MB of WebAssembly)…</p>
+  <details id="raw" hidden>
+    <summary>Last request and response</summary>
+    <pre id="raw-req"></pre>
+    <pre id="raw-res"></pre>
+  </details>
+
+  <h2>Things to try</h2>
+  <table>
+    <tr><td>Same question twice</td><td>Start a new chat and ask it again: same answer, word for word.</td></tr>
+    <tr><td>The CLI</td><td>The Terminal tab is the <code>ollama</code> CLI pointed at the mock: <code>pull</code>, <code>list</code>, <code>ps</code>, <code>show</code>, <code>run</code>, <code>stop</code>, <code>cp</code>, <code>rm</code>, and <code>curl</code> against the API. The log above it shows every request, from any tab.</td></tr>
+    <tr><td>Any model</td><td>Pull any name from the library, like <code>ollama pull mistral-small3.2:24b</code>, then pick it in Chat. Its size sets the download, load time and token speed.</td></tr>
+    <tr><td>Tools</td><td>Turn on Tools and ask about the weather in a city. The model calls <code>get_weather</code> with the city from your prompt, the page answers with a made-up result, and the model replies.</td></tr>
+    <tr><td>Vision</td><td>Pick <code>gemma3:4b</code> and attach an image. The mock counts images rather than looking at them, so the description is filler.</td></tr>
+    <tr><td>JSON</td><td>Turn on JSON to send a schema as <code>format</code>. The answer always matches it.</td></tr>
+    <tr><td>Decision</td><td>Typed questions about a state: yes or no, one of a set, or a score. Each comes back with probabilities that sum to 1.</td></tr>
+    <tr><td>Embeddings</td><td>Texts that share words land closer together, so the two password questions score higher with each other than with the pizza ones.</td></tr>
+    <tr><td>Infill</td><td>A code model fills the gap between the two halves, the way an editor's autocomplete asks.</td></tr>
+    <tr><td>Errors</td><td>A model you haven't pulled, tools on <code>gemma3:4b</code>, or a chat with <code>nomic-embed-text</code> get Ollama's own errors.</td></tr>
+    <tr><td>Stop</td><td>Stop mid-answer: the request is cancelled inside the mock, as a client hanging up would.</td></tr>
+  </table>
+  <p class="muted small" style="margin-top:12px">This is the real mock, compiled to WebAssembly, answering requests in this tab, with <code>qwen3:8b</code>, <code>llama3.2</code>, <code>gemma3:4b</code>, <code>nomic-embed-text</code>, <code>kev</code> and <code>qwen2.5-coder:7b</code> installed. Nothing is sent anywhere. Open the console and try <code>await (await ollamaMock.fetch("/api/ps")).json()</code>.</p>
+
+  <h2>Run it</h2>
+  <pre>go install github.com/kinduff/ollama-mock/cmd/ollama-mock@latest
+ollama-mock -models qwen3:8b,llama3.2,nomic-embed-text</pre>
+  <p>It listens on <code>127.0.0.1:11434</code>, like Ollama, so your code and the <code>ollama</code> CLI work against it unchanged.</p>
+  <pre>curl -N localhost:11434/api/chat -d '{
+  "model": "qwen3:8b",
+  "messages": [{"role": "user", "content": "How do I keep a sourdough starter alive?"}]
+}'</pre>
+  <p>In CI, <code>-latency 0</code> drops every wait. From Go, <code>mock.New(mock.Options{...})</code> is an <code>http.Handler</code> for <code>httptest</code>.</p>
+
+  <h2>Endpoints</h2>
+  <table>
+    <tr><td><code>/api/*</code></td><td>Ollama's native API: chat, generate, embed, pull, show, ps, create, copy, delete.</td></tr>
+    <tr><td><code>/v1/*</code></td><td>The OpenAI-compatible API: chat completions, completions, embeddings, models.</td></tr>
+    <tr><td><code>/v1/systemone</code></td><td>Typed decisions for decision models like <code>kev</code>.</td></tr>
+    <tr><td><code>/_mock/*</code></td><td>For tests: inspect state and requests, inject faults, reset.</td></tr>
+  </table>
+  <p class="muted small" style="margin-top:12px">Everything else, including faults and how answers are made, is in the <a href="https://github.com/kinduff/ollama-mock#readme" target="_blank" rel="noopener">README</a>.</p>
+
+  <footer class="muted">Made by <a href="https://kinduff.com" target="_blank" rel="noopener">@kinduff</a>. Unofficial. Not affiliated with Ollama.</footer>
+</main>
+<script type="module">
+  import { ready, configure, mockFetch, onLog } from "./mock.js";
+  import { createTerminal, HOST } from "./terminal.js";
+  globalThis.ollamaMock = { fetch: mockFetch, configure };
+
+  const $ = (id) => document.getElementById(id);
+  const log = $("log"), input = $("input"), send = $("send"), model = $("model"), tools = $("tools"), json = $("json");
+
+  // Tools the page offers when Tools is on, and the made-up results it answers them with.
+  const TOOLS = [
+    { type: "function", function: { name: "get_weather", description: "Get the current weather for a city",
+      parameters: { type: "object", properties: { city: { type: "string", description: "City name" } }, required: ["city"] } } },
+    { type: "function", function: { name: "search_web", description: "Search the web and return the top results",
+      parameters: { type: "object", properties: { query: { type: "string", description: "Search query" } }, required: ["query"] } } },
+  ];
+  const runTool = ({ name, arguments: args }) => name === "get_weather"
+    ? { city: args.city, temperature_c: 18, conditions: "partly cloudy" }
+    : { results: [{ title: `About ${args.query}`, url: "https://example.com" }] };
+
+  // The schema sent as format when JSON is on.
+  const SCHEMA = {
+    type: "object",
+    properties: {
+      answer: { type: "string" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      tags: { type: "array", items: { type: "string" }, maxItems: 3 },
+      sentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
+    },
+    required: ["answer", "confidence", "tags", "sentiment"],
+  };
+
+  const SUGGESTIONS = [
+    ["What's the weather in Paris?", true],
+    ["Write a Python function that reverses a string", false],
+    ["Compare Postgres and SQLite in a table", false],
+    ['Say "pong"', false],
+  ];
+
+  const pretty = (v) => JSON.stringify(v, null, 2);
+  $("d-state").value = pretty({ ticket: "Checkout returns 500 since this morning's deploy", customer: "enterprise", reported_by: "on-call" });
+  $("d-questions").value = pretty({
+    urgent: { type: "noul", instructions: "Does this need a human right now?" },
+    team: { type: "choice", instructions: "Which team should own this?", criteria: ["payments", "frontend", "infrastructure", "support"] },
+    severity: { type: "score", instructions: "How severe is this?", criteria: ["Routine", "Minor", "Major", "Critical"] },
+  });
+  $("e-input").value = [
+    "How do I reset my password?",
+    "I forgot my password and can't log in",
+    "What's the best pizza in Naples?",
+    "Where can I get good pizza in Naples?",
+  ].join("\n");
+  $("i-prefix").value = 'def fibonacci(n):\n    """Return the nth Fibonacci number."""\n';
+  $("i-suffix").value = "\n\nprint(fibonacci(10))\n";
+
+  let history = [], controller = null, attached = null;
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  const BLOCK = /^(```|#{1,6} |\||- |\* |\d+\. )/;
+
+  // md renders the markdown the mock writes: fences, headings, tables, lists and paragraphs.
+  function md(text) {
+    const lines = text.split("\n"), out = [];
+    for (let i = 0; i < lines.length;) {
+      const line = lines[i];
+      if (line.startsWith("```")) {
+        const code = [];
+        for (i++; i < lines.length && !lines[i].startsWith("```"); i++) code.push(lines[i]);
+        i++;
+        out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`);
+      } else if (/^#{1,6} /.test(line)) {
+        out.push(`<h4>${inline(line.replace(/^#+ /, ""))}</h4>`);
+        i++;
+      } else if (line.startsWith("|")) {
+        const rows = [];
+        for (; i < lines.length && lines[i].startsWith("|"); i++) if (!/^\|[\s|:-]+\|$/.test(lines[i])) rows.push(lines[i]);
+        const cells = (r) => r.replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
+        out.push(`<table>${rows.map((r, j) => `<tr>${cells(r).map((c) => j ? `<td>${c}</td>` : `<th>${c}</th>`).join("")}</tr>`).join("")}</table>`);
+      } else if (/^(- |\* |\d+\. )/.test(line)) {
+        const tag = /^\d/.test(line) ? "ol" : "ul", items = [];
+        for (; i < lines.length && /^(- |\* |\d+\. )/.test(lines[i]); i++) items.push(`<li>${inline(lines[i].replace(/^(- |\* |\d+\. )/, ""))}</li>`);
+        out.push(`<${tag}>${items.join("")}</${tag}>`);
+      } else if (!line.trim()) {
+        i++;
+      } else {
+        const para = [];
+        for (; i < lines.length && lines[i].trim() && !BLOCK.test(lines[i]); i++) para.push(inline(lines[i]));
+        out.push(`<p>${para.join("<br>")}</p>`);
+      }
+    }
+    return out.join("");
+  }
+
+  const el = (tag, cls, html) => Object.assign(document.createElement(tag), { className: cls || "", innerHTML: html || "" });
+  function add(node) {
+    const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.querySelector(".empty")?.remove();
+    log.appendChild(node);
+    if (stick) log.scrollTop = log.scrollHeight;
+    return node;
+  }
+  const follow = () => { if (log.scrollHeight - log.scrollTop - log.clientHeight < 120) log.scrollTop = log.scrollHeight; };
+
+  function showEmpty() {
+    log.replaceChildren();
+    const empty = el("div", "empty", "Ask anything. The answers are plausible filler, made to exercise your code, not to be right.");
+    const chips = el("div", "chips");
+    for (const [text, withTools] of SUGGESTIONS) {
+      const b = el("button", "", esc(text));
+      b.type = "button";
+      b.onclick = () => { if (withTools) tools.checked = true; ask(text); };
+      chips.appendChild(b);
+    }
+    empty.appendChild(chips);
+    log.appendChild(empty);
+  }
+
+  // raw shows a request and its response under the card.
+  function raw(req, res) {
+    $("raw").hidden = false;
+    $("raw-req").textContent = req;
+    $("raw-res").textContent = res;
+  }
+
+  // call sends a JSON request that doesn't stream and returns the parsed body, throwing Ollama's
+  // error message on a failure. shorten, when given, trims the body for the raw view.
+  async function call(path, body, shorten = (d) => d) {
+    const req = `POST ${path}\n${pretty(body)}`;
+    raw(req, "");
+    const res = await mockFetch(path, { method: "POST", body: JSON.stringify(body) });
+    const text = await res.text();
+    const data = JSON.parse(text);
+    raw(req, `${res.status}\n${pretty(res.ok ? shorten(data) : data)}`);
+    if (!res.ok) throw Object.assign(new Error(`${res.status} ${data.error?.message ?? data.error}`), { status: res.status, model: body.model });
+    return data;
+  }
+
+  // errorBox shows an error. A model that isn't installed gets a button to pull it in the terminal.
+  function errorBox({ message, status, model }) {
+    const box = el("div", "err", esc(message));
+    if (status === 404 && model) {
+      const b = el("button", "", `ollama pull ${esc(model)}`);
+      b.type = "button";
+      b.onclick = () => pullInTerminal(model);
+      box.appendChild(b);
+    }
+    return box;
+  }
+
+  const secs = (ns) => `${(ns / 1e9).toFixed(2)} s`;
+  function stats(d) {
+    const parts = [`${d.eval_count} tokens`, `${(d.eval_count / (d.eval_duration / 1e9)).toFixed(1)} tokens/s`];
+    if (d.load_duration > 1e8) parts.push(`loaded in ${secs(d.load_duration)}`);
+    return parts.join(", ");
+  }
+
+  // MARK: chat
+
+  function busy(on) {
+    send.textContent = on ? "Stop" : "Send";
+    send.type = on ? "button" : "submit";
+    input.disabled = on;
+    if (!on) input.focus();
+  }
+
+  function attach(file) {
+    attached = null;
+    $("attached").hidden = true;
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      attached = { url: reader.result, b64: reader.result.split(",")[1] };
+      $("attached").replaceChildren(Object.assign(document.createElement("img"), { src: attached.url, alt: "" }),
+        el("span", "", `${esc(file.name)} goes with your next message.`));
+      $("attached").hidden = false;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function ask(text) {
+    if (controller || !text.trim()) return;
+    const h = history, image = attached;
+    h.push({ role: "user", content: text, ...(image && { images: [image.b64] }) });
+    const bubble = add(el("div", "msg user", esc(text)));
+    if (image) bubble.prepend(Object.assign(document.createElement("img"), { src: image.url, alt: "" }));
+    input.value = "";
+    $("image").value = "";
+    attach(null);
+    resize();
+    busy(true);
+    try {
+      while (await turn(h));
+    } finally {
+      controller = null;
+      busy(false);
+    }
+  }
+
+  // turn streams one assistant reply into h, the chat's history. It answers any tool calls and
+  // returns true to go again.
+  async function turn(h) {
+    controller = new AbortController();
+    const body = { model: model.value.trim(), messages: h };
+    if (tools.checked) body.tools = TOOLS;
+    if (json.checked) body.format = SCHEMA;
+    const shown = { ...body, messages: h.map((m) => m.images ? { ...m, images: m.images.map((b) => `<${b.length} base64 characters>`) } : m) };
+    const req = "POST /api/chat\n" + pretty(shown);
+    raw(req, "");
+
+    const msg = add(el("div", "msg"));
+    const content = el("div", "pending"), think = el("details", "think"), thinkText = el("div");
+    think.append(el("summary", "", "Thinking"), thinkText);
+    msg.appendChild(content);
+    const render = body.format ? (t) => `<pre><code>${esc(t)}</code></pre>` : md;
+    let text = "", thinking = "", calls = [], last = null, thinkStart = 0;
+
+    try {
+      const res = await mockFetch("/api/chat", { method: "POST", body: JSON.stringify(body), signal: controller.signal });
+      if (!res.ok) {
+        const text = await res.text();
+        raw(req, `${res.status}\n${text}`);
+        msg.replaceWith(add(errorBox({ message: `${res.status} ${JSON.parse(text).error}`, status: res.status, model: body.model })));
+        return false;
+      }
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buf = "", lines = [];
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += value;
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl);
+          buf = buf.slice(nl + 1);
+          if (!line.trim()) continue;
+          lines.push(line);
+          const d = JSON.parse(line);
+          if (d.error) throw new Error(d.error);
+          const m = d.message || {};
+          if (m.thinking) {
+            if (!thinking) { thinkStart = performance.now(); think.open = true; msg.prepend(think); }
+            thinking += m.thinking;
+            thinkText.textContent = thinking;
+          }
+          if (m.content || m.tool_calls) {
+            if (think.open) { think.open = false; think.firstChild.textContent = `Thought for ${((performance.now() - thinkStart) / 1000).toFixed(1)} s`; }
+          }
+          if (m.content) {
+            text += m.content;
+            content.innerHTML = render(text);
+          }
+          if (m.tool_calls) calls.push(...m.tool_calls.map((c) => c.function));
+          if (d.done) last = d;
+        }
+        follow();
+      }
+      raw(req, (lines.length > 6 ? [...lines.slice(0, 3), `… ${lines.length - 6} more lines`, ...lines.slice(-3)] : lines).join("\n"));
+    } catch (e) {
+      content.classList.remove("pending");
+      if (e.name === "AbortError") {
+        msg.appendChild(el("div", "stats", "Stopped."));
+        h.push({ role: "assistant", content: text });
+        return false;
+      }
+      msg.appendChild(el("div", "err", esc(e.message)));
+      return false;
+    }
+
+    content.classList.remove("pending");
+    if (!text) content.remove();
+    else if (body.format) try { content.innerHTML = render(pretty(JSON.parse(text))); } catch {}
+    if (think.open) think.open = false;
+    for (const c of calls) msg.appendChild(el("div", "call", `<b>${esc(c.name)}</b>(${esc(JSON.stringify(c.arguments))})`));
+    if (last) msg.appendChild(el("div", "stats", esc(stats(last))));
+    h.push({ role: "assistant", content: text, ...(calls.length && { tool_calls: calls.map((f) => ({ function: f })) }) });
+    if (!calls.length) return false;
+
+    for (const c of calls) {
+      const result = runTool(c);
+      h.push({ role: "tool", tool_name: c.name, content: JSON.stringify(result) });
+      add(el("div", "call", `${esc(c.name)} returned ${esc(JSON.stringify(result))}`));
+    }
+    return true;
+  }
+
+  function resize() {
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight + 2}px`;
+  }
+
+  // installed lists the mock's models through /_mock/state, which stays out of the request log.
+  const installed = async () => (await (await mockFetch("/_mock/state")).json()).installed;
+  async function loadModels() {
+    const names = await installed();
+    $("chat-models").replaceChildren(...names.map((n) => Object.assign(document.createElement("option"), { value: n })));
+  }
+
+  // MARK: decision, embeddings, infill
+
+  const pct = (p) => `${Math.round(p * 100)}%`;
+  const bars = (rows) => rows.map((r) =>
+    `<div class="row${r.on ? " on" : ""}"><span>${esc(r.label)}</span><span class="track"><span style="width:${(r.p * 100).toFixed(1)}%"></span></span><span>${pct(r.p)}</span></div>`).join("");
+
+  function answer(name, q, a) {
+    let rows, note = "";
+    if (a.type === "noul") {
+      rows = [{ label: "yes", p: a.noul, on: a.noul >= 0.5 }, { label: "no", p: 1 - a.noul, on: a.noul < 0.5 }];
+    } else if (a.type === "choice") {
+      const labels = Array.isArray(q?.criteria) ? q.criteria : Object.keys(a.probabilities);
+      rows = labels.map((k) => ({ label: k, p: a.probabilities[k] ?? 0, on: k === a.choice }));
+      note = `confidence ${a.confidence}`;
+    } else {
+      const top = Math.max(...Object.values(a.probabilities));
+      rows = Object.keys(a.legend).map((k) => ({ label: a.legend[k], p: a.probabilities[k], on: a.probabilities[k] === top }));
+      note = `score ${a.score} on 0 to ${rows.length - 1}, confidence ${a.confidence}`;
+    }
+    return `<div class="q"><h4>${esc(name)} <span class="muted small">${esc(a.type)}</span></h4><p>${esc(q?.instructions ?? "")}</p>${bars(rows)}${note && `<div class="stats">${esc(note)}</div>`}</div>`;
+  }
+
+  async function decide() {
+    const out = $("d-out");
+    let state, questions;
+    try {
+      state = JSON.parse($("d-state").value);
+      questions = JSON.parse($("d-questions").value);
+    } catch (e) {
+      out.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+      return;
+    }
+    const d = await call("/v1/systemone", { model: $("d-model").value.trim(), state, questions });
+    out.innerHTML = Object.keys(d.answers).sort().map((n) => answer(n, questions[n], d.answers[n])).join("")
+      + `<div class="stats">${d.usage.input_tokens} input tokens, ${d.usage.output_tokens} answers</div>`;
+  }
+
+  async function embed() {
+    const texts = $("e-input").value.split("\n").map((t) => t.trim()).filter(Boolean);
+    const d = await call("/api/embed", { model: $("e-model").value.trim(), input: texts }, (d) => ({
+      ...d, embeddings: d.embeddings.map((e) => [...e.slice(0, 4), `… ${e.length - 4} more`]),
+    }));
+    const v = d.embeddings;
+    const cos = (a, b) => {
+      let dot = 0, na = 0, nb = 0;
+      for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+      return dot / Math.sqrt(na * nb);
+    };
+    const head = `<tr><th></th>${texts.map((_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
+    const rows = texts.map((t, i) => `<tr><th title="${esc(t)}">${i + 1}. ${esc(t)}</th>${v.map((_, j) => {
+      const s = cos(v[i], v[j]);
+      return `<td style="background:color-mix(in srgb, var(--accent) ${Math.round(Math.max(0, s) * 55)}%, transparent)">${s.toFixed(2)}</td>`;
+    }).join("")}</tr>`).join("");
+    $("e-out").innerHTML = `<div class="scroll"><table class="grid">${head}${rows}</table></div>`
+      + `<div class="stats">Cosine similarity. ${v[0]?.length ?? 0} dimensions, ${d.prompt_eval_count} tokens. First values of 1: [${(v[0] ?? []).slice(0, 5).map((x) => x.toFixed(4)).join(", ")}, …]</div>`;
+  }
+
+  async function fill() {
+    const prompt = $("i-prefix").value, suffix = $("i-suffix").value;
+    const d = await call("/api/generate", { model: $("i-model").value.trim(), prompt, suffix, stream: false });
+    $("i-out").innerHTML = `<pre class="infill"><code>${esc(prompt)}<mark>${esc(d.response)}</mark>${esc(suffix)}</code></pre>`
+      + `<div class="stats">${esc(stats(d))}</div>`;
+  }
+
+  // run wires a panel's button to its request, showing errors in the panel.
+  function run(button, out, fn) {
+    $(button).onclick = async () => {
+      $(button).disabled = true;
+      try { await fn(); } catch (e) { $(out).replaceChildren(errorBox(e)); }
+      $(button).disabled = false;
+    };
+  }
+  run("d-run", "d-out", decide);
+  run("e-run", "e-out", embed);
+  run("i-run", "i-out", fill);
+
+  // MARK: page
+
+  function select(tab) {
+    for (const t of document.querySelectorAll("[role=tab]")) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on);
+      $(t.getAttribute("aria-controls")).hidden = !on;
+    }
+    if (tab.id === "tab-terminal") term.focus();
+  }
+  for (const t of document.querySelectorAll("[role=tab]")) t.onclick = () => select(t);
+
+  // The terminal shares the mock with the other tabs: what it pulls or removes shows up in Chat.
+  const term = createTerminal($("terminal"), { onChange: () => loadModels().catch(() => {}) });
+  function pullInTerminal(name) {
+    select($("tab-terminal"));
+    term.run(`ollama pull ${name}`);
+  }
+  const short = (name) => name.replace(/:latest$/, "");
+  let version = "";
+  // started logs the mock starting, as ollama-mock prints it.
+  function started(latency, names) {
+    term.log(`$ ollama-mock${latency === 1 ? "" : ` -latency ${latency}`} -models ${names.map(short).join(",")}\n`, "t-ps");
+    term.log(`ollama-mock ${version} listening on ${HOST} (latency ${latency}, ${names.length} models installed)\n`);
+  }
+
+  $("form").onsubmit = (e) => { e.preventDefault(); ask(input.value); };
+  send.onclick = () => { if (controller) controller.abort(); };
+  input.oninput = resize;
+  input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(input.value); } };
+  $("image").onchange = (e) => attach(e.target.files[0]);
+  $("reset").onclick = () => { controller?.abort(); history = []; showEmpty(); input.focus(); };
+  // A new speed restarts the mock with the models installed now, so pulls survive it.
+  $("speed").onchange = async (e) => {
+    const latency = Number(e.target.value), names = await installed();
+    await configure({ latency, models: names });
+    term.log("^C\n");
+    started(latency, names);
+    loadModels();
+  };
+  for (const m of document.querySelectorAll("input[list]")) m.onfocus = () => m.select();
+  model.addEventListener("focus", () => loadModels().catch(() => {}));
+
+  showEmpty();
+  try {
+    await ready;
+    ({ version } = await (await mockFetch("/api/version")).json());
+    started(1, await installed());
+    await onLog((line) => term.log(line));
+    term.write("# The ollama CLI, pointed at the mock running in this tab. Try ", "t-dim");
+    ["ollama list", "ollama pull deepseek-r1:8b", "ollama run qwen3:8b", "ollama ps"].forEach((c, i, all) => {
+      term.link(c);
+      term.write(i < all.length - 1 ? ", " : "\n", "t-dim");
+    });
+    term.ready();
+    await loadModels();
+    $("conn").classList.add("on");
+    $("conn-text").innerHTML = "Connected to <b>browser:11434</b>";
+    $("conn-version").textContent = `ollama-mock ${version}`;
+    $("status").textContent = `ollama-mock ${version} is running in this tab, compiled from Go to WebAssembly. Nothing you type leaves the page.`;
+    input.placeholder = "Message the mock";
+    input.disabled = send.disabled = false;
+    for (const b of ["d-run", "e-run", "i-run"]) $(b).disabled = false;
+  } catch (e) {
+    $("conn").classList.add("off");
+    $("conn-text").innerHTML = "Not connected to <b>browser:11434</b>";
+    $("status").textContent = `The mock didn't start: ${e.message}`;
+  }
+</script>
+</body>
+</html>
