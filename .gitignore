@@ -1,1 +1,4 @@
 /ollama-mock
+site/public/ollama-mock.wasm
+site/public/wasm_exec.js
+.wrangler
