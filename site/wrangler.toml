@@ -1,6 +1,8 @@
 name = "ollama-mock"
 compatibility_date = "2026-10-01"
 
+routes = [{ pattern = "ollama-mock.kinduff.com", custom_domain = true }]
+
 # The page and the mock compiled to WebAssembly, served as static assets. No Worker code.
 [assets]
 directory = "public"
