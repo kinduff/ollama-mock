@@ -404,3 +404,10 @@ func TestLatencyPacesTokens(t *testing.T) {
 		t.Fatalf("took %s, want about %s", took, want)
 	}
 }
+
+func TestContractionsAreNotTopics(t *testing.T) {
+	got := strings.Join(keywords("What's the weather in Paris? There's rain and it isn't warm"), ",")
+	if want := "weather,paris,rain,warm"; got != want {
+		t.Errorf("keywords: got %s, want %s", got, want)
+	}
+}
